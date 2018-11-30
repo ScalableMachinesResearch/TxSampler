@@ -291,6 +291,7 @@ MY_BASE_FILES =				\
 	sample-sources/common.c         \
 	sample-sources/display.c		\
 	sample-sources/ga.c		\
+        sample-sources/htm.c            \
 	sample-sources/io.c 		\
 	sample-sources/itimer.c		\
 	sample-sources/idle.c		\
@@ -298,6 +299,7 @@ MY_BASE_FILES =				\
 	sample-sources/pthread-blame.c  \
 	sample-sources/none.c           \
 	sample-sources/retcnt.c         \
+        sample-sources/shadow-memory.c  \
 	sample-sources/sync.c           \
 	sample_sources_registered.c	\
 	segv_handler.c			\

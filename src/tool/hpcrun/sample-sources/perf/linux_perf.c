@@ -88,6 +88,7 @@
 #include "sample-sources/simple_oo.h"
 #include "sample-sources/sample_source_obj.h"
 #include "sample-sources/common.h"
+#include "sample-sources/htm.h"
 
 #include <hpcrun/cct_insert_backtrace.h>
 #include <hpcrun/files.h>
@@ -219,6 +220,7 @@ extern __thread bool hpcrun_thread_suppress_sample;
 //******************************************************************************
 // private operations 
 //******************************************************************************
+
 
 /* 
  * determine whether the perf sample source has been finalized for this thread
@@ -550,9 +552,21 @@ record_sample(event_thread_t *current, perf_mmap_data_t *mmap_data,
   // ----------------------------------------------------------------------------
   sampling_info_t info = {.sample_clock = 0, .sample_data = mmap_data};
 
-  *sv = hpcrun_sample_callpath(context, current->event->metric,
-        (hpcrun_metricVal_t) {.r=counter},
-        0/*skipInner*/, 0/*isSync*/, &info);
+  uint64_t call_chain[MAX_LBR_ENTRIES];
+  int depth = htm_get_call_chain_from_lbr(mmap_data->lbr, mmap_data->bnr, mmap_data->ip, call_chain);
+  if (depth >= 0) {
+    *sv = hpcrun_sample_callpath(context, current->event->metric,
+          ((hpcrun_metricVal_t){.r=0}) /*do not log metric*/,
+          1/*skipInner*/, 0/*isSync*/, &info);  
+     sv->sample_node = htm_add_missing_call_path_from_lbr(call_chain, depth, mmap_data->ip, sv->sample_node);
+     cct_metric_data_increment(current->event->metric, sv->sample_node,
+         (hpcrun_metricVal_t){.r = counter});
+  } else {
+    *sv = hpcrun_sample_callpath(context, current->event->metric,
+          (hpcrun_metricVal_t) {.r=counter},
+          0/*skipInner*/, 0/*isSync*/, &info);
+  }  
+  htm_attribute_derived_metrics(current->event->metric_desc->name, mmap_data, sv->sample_node, counter);
 
   blame_shift_apply(current->event->metric, sv->sample_node, 
                     counter /*metricIncr*/);
@@ -890,6 +904,61 @@ METHOD_FN(process_event_list, int lush_metrics)
     }
     event_desc[i].metric_desc = m;
     METHOD_CALL(self, store_event, event_attr->config, threshold);
+
+    if (strstr(name, "cycles")) {
+      htm_metric_cyc.in_htm_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_cyc.in_htm_metric_id, "TIME_IN_HTM",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_cyc.in_fallback_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_cyc.in_fallback_metric_id, "TIME_IN_FALLBACK",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_cyc.in_lockwaiting_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_cyc.in_lockwaiting_metric_id, "TIMEIN_LOCK_WAITING",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_cyc.in_other_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_cyc.in_other_metric_id, "TIMEIN_OTHER_TX",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+    }
+    if (strstr(name, "RTM_RETIRED:ABORTED")) {
+      htm_metric_abort.weight_metric_id = hpcrun_new_metric(); // the latency caused by the transaction abort
+      hpcrun_set_metric_info_and_period(htm_metric_abort.weight_metric_id, "HTM_WEIGHT",
+                                        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.conflict_metric_id = hpcrun_new_metric(); // the number of conflict aborts
+      hpcrun_set_metric_info_and_period(htm_metric_abort.conflict_metric_id, "HTM_CONFLICT",
+                                        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.conflict_weight_metric_id = hpcrun_new_metric(); // the latency caused by conflict aborts
+      hpcrun_set_metric_info_and_period(htm_metric_abort.conflict_weight_metric_id, "HTM_CONFLICT_WEIGHT",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.capacity_read_metric_id = hpcrun_new_metric(); // the number of capacity read aborts
+      hpcrun_set_metric_info_and_period(htm_metric_abort.capacity_read_metric_id, "HTM_CAPACITY_READ",
+                                        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.capacity_read_weight_metric_id = hpcrun_new_metric(); // the latency caused by the capacity read aborts
+      hpcrun_set_metric_info_and_period(htm_metric_abort.capacity_read_weight_metric_id, "HTM_CAPACITY_READ_WEIGHT",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.capacity_write_metric_id = hpcrun_new_metric(); // the number of capacity write aborts
+      hpcrun_set_metric_info_and_period(htm_metric_abort.capacity_write_metric_id, "HTM_CAPACITY_WRITE",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.capacity_write_weight_metric_id = hpcrun_new_metric(); // the latency caused by capacity write aborts
+      hpcrun_set_metric_info_and_period(htm_metric_abort.capacity_write_weight_metric_id, "HTM_CAPACITY_WRITE_WEIGHT",
+                                        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.sync_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_abort.sync_metric_id, "HTM_SYNC",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.sync_weight_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_abort.sync_weight_metric_id, "HTM_SYNC_WEIGHT",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.async_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_abort.async_metric_id, "HTM_ASYNC",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+      htm_metric_abort.async_weight_metric_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_abort.async_weight_metric_id, "HTM_ASYNC_WEIGHT",
+  				        MetricFlags_ValFmt_Real, threshold, metric_property_none);
+    }
+    if (strstr(name, "MEM_UOPS_RETIRED:ALL_LOADS") || strstr(name, "MEM_UOPS_RETIRED:ALL_STORES")){
+      htm_metric_mem.false_sharing_id = hpcrun_new_metric();
+      hpcrun_set_metric_info_and_period(htm_metric_mem.false_sharing_id, "FALSE_SHARING",
+                                        MetricFlags_ValFmt_Real,threshold, metric_property_none);
+    }
   }
 
   if (num_events > 0)

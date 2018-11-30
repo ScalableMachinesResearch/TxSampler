@@ -380,9 +380,13 @@ parse_buffer(int sample_type, event_thread_t *current, perf_mmap_data_t *mmap_in
 	  perf_read( current_perf_mmap, mmap_info->data, mmap_info->size) ;
 	  data_read++;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
 	if (sample_type & PERF_SAMPLE_BRANCH_STACK) {
+          perf_read_u64(current_perf_mmap, &mmap_info->bnr);
+          perf_read(current_perf_mmap, mmap_info->lbr, sizeof(struct perf_branch_entry) * mmap_info->bnr);
 	  data_read++;
 	}
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 	if (sample_type & PERF_SAMPLE_REGS_USER) {
 	  data_read++;
@@ -393,6 +397,7 @@ parse_buffer(int sample_type, event_thread_t *current, perf_mmap_data_t *mmap_in
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
 	if (sample_type & PERF_SAMPLE_WEIGHT) {
+          perf_read_u64(current_perf_mmap, &mmap_info->weight);
 	  data_read++;
 	}
 	if (sample_type & PERF_SAMPLE_DATA_SRC) {
@@ -403,6 +408,7 @@ parse_buffer(int sample_type, event_thread_t *current, perf_mmap_data_t *mmap_in
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0)
 	// only available since kernel 3.19
 	if (sample_type & PERF_SAMPLE_TRANSACTION) {
+          perf_read_u64(current_perf_mmap, &mmap_info->transaction);
 	  data_read++;
 	}
 #endif
@@ -539,4 +545,5 @@ perf_mmap_init()
   pagesize = sysconf(_SC_PAGESIZE);
   tail_mask = PERF_TAIL_MASK(pagesize);
 }
+
 

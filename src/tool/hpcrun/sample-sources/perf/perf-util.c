@@ -496,7 +496,22 @@ perf_util_attr_init(
   // For instance, IDLE-CYCLES-BACKEND will fail if we set PERF_SAMPLE_ADDR.
   // By default, we need to initialize sample_type as minimal as possible.
   unsigned int sample_type = sampletype 
-                             | PERF_SAMPLE_PERIOD | PERF_SAMPLE_TIME;
+                             | PERF_SAMPLE_PERIOD | PERF_SAMPLE_TIME
+                             | PERF_SAMPLE_IP | PERF_SAMPLE_ADDR
+                             | PERF_SAMPLE_CPU | PERF_SAMPLE_TID
+                             #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+                             | PERF_SAMPLE_BRANCH_STACK
+                             #endif
+                             #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
+                             | PERF_SAMPLE_WEIGHT | PERF_SAMPLE_DATA_SRC
+                             #endif
+                             #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0)
+                             | PERF_SAMPLE_TRANSACTION;
+                             #endif
+  #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+  attr->branch_sample_type = PERF_SAMPLE_BRANCH_USER | PERF_SAMPLE_BRANCH_ANY_CALL
+                             | PERF_SAMPLE_BRANCH_ANY_RETURN | PERF_SAMPLE_BRANCH_ABORT_TX;
+  #endif
 
   attr->size   = sizeof(struct perf_event_attr); /* Size of attribute structure */
   attr->freq   = (usePeriod ? 0 : 1);
